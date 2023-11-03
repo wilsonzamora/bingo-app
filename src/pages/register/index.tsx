@@ -1,8 +1,10 @@
+import React, { useEffect, useRef, useState } from 'react'
+import { useRouter } from 'next/router'
 import Divider from '@/components/Divider'
 import Header from '@/components/Header'
 import Modal from '@/components/Modal'
-import { useRouter } from 'next/router'
-import React, { useEffect, useState } from 'react'
+import { snackbar } from '@/utils/snackbar'
+import { useSnackbar } from 'notistack'
 
 export type card = {
   id: number,
@@ -16,22 +18,32 @@ const RegisterBingo = () => {
   const [card, setCard] = useState<card>({id: savedCards.length + 1, numbers: [], totalNumbers: []})
   const [deleting, setDeleting] = useState(false)
   const [cardToDelete, setCardToDelete] = useState<card>()
+  const [buttonResetClicked, setButtonResetClicked] = useState(false)
+  const input1Ref = useRef(null);
+  const input2Ref = useRef(null);
+  const input3Ref = useRef(null);
+  const input4Ref = useRef(null);
+  const input5Ref = useRef(null);
   const [number1, setNumber1] = useState('')
   const [number2, setNumber2] = useState('')
   const [number3, setNumber3] = useState('')
   const [number4, setNumber4] = useState('')
   const [number5, setNumber5] = useState('')
+  const inputs = [number1, number2, number3, number4, number5]
+  
+  const { enqueueSnackbar } = useSnackbar()
   const router = useRouter()
   const letters = ['B', 'I', 'N', 'G', 'O']
-
-  console.log('savedCards:', savedCards);
-  console.log('deleting:', deleting);
   
   const getCardsLS = () => {
     const savedCardsJSON = localStorage.getItem('cards');
     const savedCardsLS = savedCardsJSON ? JSON.parse(savedCardsJSON) : [];
     setSavedCards(savedCardsLS)
   }
+
+  const baseValue = (letterSelected - 1) * 15 + 1;
+  const minValue = baseValue;
+  const maxValue = baseValue + 14;
   
   useEffect(() => {
     getCardsLS()
@@ -57,23 +69,28 @@ const RegisterBingo = () => {
   }
 
   const handleNextOrSaveClick = () => {
+    const repeatedElements = new Set(inputs).size < inputs.length;
+    if (repeatedElements) {
+      const message = 'You have repeated numbers. Please check them.'
+      snackbar(enqueueSnackbar, message, 'info')
+      return
+    }
     if ( letterSelected < 5 && disabled ) {
-      card?.numbers.push([`${number1}`, `${number2}`, `${number3}`, `${number4}`, `${number5}`])
+      card?.numbers.push(inputs)
       setCard({
         id: savedCards.length + 1,
         numbers: [...card?.numbers],
-        totalNumbers: [...card?.totalNumbers]
+        totalNumbers: [...card?.totalNumbers].concat(inputs)
       })
       setLetterSelected(letterSelected + 1)
       resetInputs()
 
     } else if ( letterSelected === 5 && disabled ) {
-      card.numbers.push([`${number1}`, `${number2}`, `${number3}`, `${number4}`, `${number5}`])
+      card.numbers.push(inputs)
       const totalN = [].concat(...card.numbers)
       const totalNWithoutX = totalN.filter(x => x !== 'x')
-      card.totalNumbers.push(totalNWithoutX)
 
-      savedCards.push(card)
+      savedCards.push({...card, totalNumbers: totalNWithoutX})
       localStorage.setItem('cards', JSON.stringify(savedCards));
       
       getCardsLS()
@@ -87,9 +104,12 @@ const RegisterBingo = () => {
     }
   }
 
-  const handleResetCard = () => {
+  const handleResetCard = (inputRef: any) => {
     setLetterSelected(1)
     setCard({id: savedCards.length + 1, numbers: [], totalNumbers: []})
+    setButtonResetClicked(true)
+    inputRef?.current?.focus()
+    resetInputs()
   }
 
   const clickDeleteCardByID = (cardToDelete: card) => {
@@ -135,15 +155,49 @@ const RegisterBingo = () => {
   const handleRegisterClick = () => { return }
   const handlePlayClick = () => router.push('/play')
 
+  const handleInputChange = (e: any, setter: any) => {
+    setButtonResetClicked(false)
+    const value = e.target.value
+    setter(value)
+  }
+
+  const handlerInputBlur = (inputValue: string, setter: any, inputRef: any, index: number) => {
+    if (buttonResetClicked) {
+      setter('')
+      return
+    }
+
+    if (inputValue === '') return
+
+    const inputsCopy = [...inputs]
+    inputsCopy.splice(index - 1, 1)
+    if (inputsCopy.includes(inputValue)) {
+      const message = `This number is already registered`
+      snackbar(enqueueSnackbar, message, 'info')
+      setter('')
+      inputRef.current.focus()
+      return
+    }
+
+    if (+inputValue >= minValue && +inputValue <= maxValue) {
+      return
+    } else {
+      const message = `Number is out of range (${minValue}-${maxValue})`
+      snackbar(enqueueSnackbar, message, 'info')
+      setter('')
+      inputRef.current.focus()
+    }
+  }
+
   return (
     <div className='w-[100%] min-h-screen flex flex-col pb-[20px]'>
       <Header path={router.pathname} registerClick={handleRegisterClick} playClick={handlePlayClick} />
 
-      <div className='flex space-x-[20px] items-center mt-[30px] mx-auto mt-[20px] px-[15px]'>
-        <div className="md:w-[350px] w-[100%] h-auto bg-white rounded-lg shadow-lg p-3 md:p-4 border">
+      <div className='flex flex-col items-center mt-[30px] mx-auto mt-[20px] px-[15px]'>
+        <div className="md:w-[350px] w-[95%] h-auto bg-white rounded-lg shadow-lg p-3 md:p-4 border">
           <div className="text-center font-bold text-[20px] mb-2">Add your card numbers</div>
           <span className='text-[14px] font-[300] tracking-tighter leading-tight'>
-            * Fill with the numbers from column <span className='font-[900]'>{activeLetter()}</span>
+            * Fill with the numbers from column <span className='font-[900]'>{activeLetter()}</span> <span className='text-[12px] font-[600] ml-[2px]'>({minValue} - {maxValue})</span>
           </span>
           <table className="w-full border border-[#0c484e] mt-2">
             <tbody>
@@ -165,38 +219,98 @@ const RegisterBingo = () => {
                 )}
                 <td className="w-1/6 h-12 text-center border border-[#0c484e]">
                   <input
+                    ref={input1Ref}
                     className='w-full h-full text-center'
+                    pattern="[0-9]{1,2}"
+                    maxLength={2}
+                    onInput={(e: any) => {
+                      const inputText = e.target.value;
+                      if (!/^\d*$/.test(inputText)) {
+                        e.target.value = inputText.replace(/\D/g, '');
+                        const message = 'Please enter a number'
+                        snackbar(enqueueSnackbar, message, 'info')
+                      }
+                    }}
                     value={number1}
-                    onChange={(e: any) => setNumber1(e.target.value)}
+                    onChange={(e: any) => handleInputChange(e, setNumber1)}
+                    onBlur={(e: any) => handlerInputBlur(e.target.value, setNumber1, input1Ref, 1)}
                   />
                 </td>
                 <td className="w-1/6 h-12 text-center border border-[#0c484e]">
                   <input
+                    ref={input2Ref}
                     className='w-full h-full text-center'
+                    pattern="[0-9]{1,2}"
+                    maxLength={2}
+                    onInput={(e: any) => {
+                      const inputText = e.target.value;
+                      if (!/^\d*$/.test(inputText)) {
+                        e.target.value = inputText.replace(/\D/g, '');
+                        const message = 'Please enter a number'
+                        snackbar(enqueueSnackbar, message, 'info')
+                      }
+                    }}
                     value={number2}
-                    onChange={(e: any) => setNumber2(e.target.value)}
+                    onChange={(e: any) => handleInputChange(e, setNumber2)}
+                    onBlur={() => handlerInputBlur(number2, setNumber2, input2Ref, 2)}
                   />
                 </td>
                 <td className="w-1/6 h-12 text-center border border-[#0c484e]">
                   <input
+                    ref={input3Ref}
                     className={`w-full h-full text-center ${letterSelected === 3 && 'bg-[#0c484e] text-white'}`}
+                    pattern="[0-9]{1,2}"
+                    maxLength={2}
+                    onInput={(e: any) => {
+                      const inputText = e.target.value;
+                      if (!/^\d*$/.test(inputText)) {
+                        e.target.value = inputText.replace(/\D/g, '');
+                        const message = 'Please enter a number'
+                        snackbar(enqueueSnackbar, message, 'info')
+                      }
+                    }}
                     value={number3}
-                    onChange={(e: any) => setNumber3(e.target.value)}
+                    onChange={(e: any) => handleInputChange(e, setNumber3)}
+                    onBlur={() => handlerInputBlur(number3, setNumber3, input3Ref, 3)}
                     disabled={letterSelected === 3}
                   />
                 </td>
                 <td className="w-1/6 h-12 text-center border border-[#0c484e]">
                   <input
+                    ref={input4Ref}
                     className='w-full h-full text-center'
+                    pattern="[0-9]{1,2}"
+                    maxLength={2}
+                    onInput={(e: any) => {
+                      const inputText = e.target.value;
+                      if (!/^\d*$/.test(inputText)) {
+                        e.target.value = inputText.replace(/\D/g, '');
+                        const message = 'Please enter a number'
+                        snackbar(enqueueSnackbar, message, 'info')
+                      }
+                    }}
                     value={number4}
-                    onChange={(e: any) => setNumber4(e.target.value)}
+                    onChange={(e: any) => handleInputChange(e, setNumber4)}
+                    onBlur={() => handlerInputBlur(number4, setNumber4, input4Ref, 4)}
                   />
                 </td>
                 <td className="w-1/6 h-12 text-center border border-[#0c484e]">
                   <input
+                    ref={input5Ref}
                     className='w-full h-full text-center'
+                    pattern="[0-9]{1,2}"
+                    maxLength={2}
+                    onInput={(e: any) => {
+                      const inputText = e.target.value;
+                      if (!/^\d*$/.test(inputText)) {
+                        e.target.value = inputText.replace(/\D/g, '');
+                        const message = 'Please enter a number'
+                        snackbar(enqueueSnackbar, message, 'info')
+                      }
+                    }}
                     value={number5}
-                    onChange={(e: any) => setNumber5(e.target.value)}
+                    onChange={(e: any) => handleInputChange(e, setNumber5)}
+                    onBlur={() => handlerInputBlur(number5, setNumber5, input5Ref, 5)}
                   />
                 </td>
               </tr>
@@ -204,10 +318,10 @@ const RegisterBingo = () => {
           </table>
         </div>
 
-        <div className='flex flex-col space-y-10'>
+        <div className='flex space-x-10 mt-[20px] w-[93%] justify-between'>
           <button
             className='px-4 rounded-[4px] hover:bg-gray-200 bg-[red] text-white hover:bg-[red]/90'
-            onClick={handleResetCard}
+            onClick={() => handleResetCard(input1Ref)}
           >
             reset
           </button>

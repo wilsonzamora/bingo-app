@@ -1,19 +1,22 @@
+import React, { useEffect, useState } from 'react'
+import { useRouter } from 'next/router'
+import confetti from 'canvas-confetti'
+import { useSnackbar } from 'notistack'
 import Divider from '@/components/Divider'
 import Header from '@/components/Header'
-import { useRouter } from 'next/router'
-import React, { useEffect, useState } from 'react'
 import { card } from '../register'
-import { useSnackbar } from 'notistack'
+import { snackbar } from '@/utils/snackbar'
 
 const PlayBingo = () => {
   const [numberInput, setNumberInput] = useState('')
   const [savedCards, setSavedCards] = useState<card[]>([])
   const [savedNumbersPlayed, setSavedNumbersPlayed] = useState<string[]>([])
+
   const router = useRouter()
+  const { enqueueSnackbar } = useSnackbar()
+
   const letters = ['B', 'I', 'N', 'G', 'O']
   const totalNumbersOfCards = savedCards.map(card => card.totalNumbers)
-  const { enqueueSnackbar } = useSnackbar()
-  console.log('totalNumbersOfCards:', totalNumbersOfCards);
 
   const getNumbersPlayedLS = () => {
     const numbersPlayedJSON = localStorage.getItem('numbers');
@@ -35,28 +38,25 @@ const PlayBingo = () => {
   const validateMissingCards = (cardsArray: any[], numbersPlayedArray: any[]) => {    
     for (let i = 0; i < cardsArray.length; i++) {
       const cardArray = cardsArray[i];
-      console.log('cardArray:', cardArray[0]);
-      const cardNumbersPlayed = cardArray[0].filter((elem: any) => numbersPlayedArray.includes(elem));
-      const missingCardNumbers = cardArray[0].length - cardNumbersPlayed.length
+      const cardNumbersPlayed = cardArray?.filter((elem: any) => numbersPlayedArray.includes(elem));
+      const missingCardNumbers = cardArray?.length - cardNumbersPlayed.length
       
       if (missingCardNumbers === 0) {
-        enqueueSnackbar(`Card ${i + 1}º has won! BINGO!`, {
-          variant: 'success',
-          anchorOrigin: {
-            vertical: 'top',
-            horizontal: 'right',
-          },
-          autoHideDuration: 1500
-        });
+        const message = `Card ${i + 1}º has won! BINGO!`
+        snackbar(enqueueSnackbar, message, 'success')
+        confetti({
+          zIndex: 999,
+          particleCount: 200,
+          spread: 160,
+          angle: -100,
+          origin: {
+            x: 1,
+            y: 0
+          }
+        })
       } else if (missingCardNumbers <= 5) {
-        enqueueSnackbar(`${missingCardNumbers} numbers are missing for Card ${i + 1}º to win.`, {
-          variant: 'info',
-          anchorOrigin: {
-            vertical: 'top',
-            horizontal: 'right',
-          },
-          autoHideDuration: 1500
-        });
+        const message = `${missingCardNumbers} numbers are missing for Card ${i + 1}º to win.`
+        snackbar(enqueueSnackbar, message, 'info')
       } else {
         return
       }
@@ -69,26 +69,14 @@ const PlayBingo = () => {
 
   const handleMarkCard = () => {
     if (savedCards.length === 0) {
-      enqueueSnackbar(`Register at least one card to start playing!`, {
-        variant: 'info',
-        anchorOrigin: {
-          vertical: 'top',
-          horizontal: 'right',
-        },
-        autoHideDuration: 1500
-      });
+      const message = `Register at least one card to start playing!`
+      snackbar(enqueueSnackbar, message, 'info')
       setNumberInput('')
       return
     }
     if (!numberInput) {
-      enqueueSnackbar(`Enter a number`, {
-        variant: 'info',
-        anchorOrigin: {
-          vertical: 'top',
-          horizontal: 'right',
-        },
-        autoHideDuration: 1500
-      });
+      const message = `Enter a number`
+      snackbar(enqueueSnackbar, message, 'info')
       return
     }
     if (!savedNumbersPlayed.includes(numberInput)) {
@@ -101,22 +89,21 @@ const PlayBingo = () => {
       return
     } else {
       setNumberInput('')
-      enqueueSnackbar(`This number has already been registered`, {
-        variant: 'warning',
-        anchorOrigin: {
-          vertical: 'top',
-          horizontal: 'right',
-        },
-        autoHideDuration: 1500
-      });
+      const message = `This number has already been registered`
+      snackbar(enqueueSnackbar, message, 'warning')
+
       getNumbersPlayedLS()
     }
   }
 
-  console.log('savedNumbersPlayed:', savedNumbersPlayed.includes(numberInput));
-
   const handleRefreshClick = () => {
     localStorage.removeItem('numbers');
+    getNumbersPlayedLS()
+  }
+
+  const handleDoubleClickNumberPlayed = (number: string) => {
+    const updatedNumbersPlayed = savedNumbersPlayed.filter(x => number !== x)
+    localStorage.setItem('numbers', JSON.stringify(updatedNumbersPlayed));
     getNumbersPlayedLS()
   }
 
@@ -127,7 +114,7 @@ const PlayBingo = () => {
     <div className='w-[100%] flex flex-col justify-center items-center pb-[20px]'>
       <Header path={router.pathname} registerClick={handleRegisterClick} playClick={handlePlayClick} />
 
-      <div className='mx-auto mt-[40px] flex flex-col space-y-2 border border-black py-3 px-4 rounded'>
+      <div className='mx-auto w-[360px] mt-[40px] flex flex-col space-y-2 border border-black py-3 px-4 rounded'>
         <div className='font-[500]'>
           Enter the number played
         </div>
@@ -145,8 +132,11 @@ const PlayBingo = () => {
 
       <div className='flex flex-col mt-[20px] w-[90%] mx-auto border border-black py-2 rounded'>
         <div className={`flex w-[100%] justify-between items-center ${savedNumbersPlayed.length > 0 && 'pb-2 border-b border-black'} px-3`}>
-          <div className='font-[500]'>
-            Numbers played:
+          <div className='font-[500] flex flex-col'>
+            <span>Numbers played:</span>
+            {savedNumbersPlayed.length > 0 && (
+              <span className='font-[300] text-[14px]'>Tap the number twice to delete it</span>
+            )}
           </div>
           <div>
             <button
@@ -160,7 +150,11 @@ const PlayBingo = () => {
         <div className='flex mt-[5px] flex-wrap px-3'>
           {savedNumbersPlayed?.map(number => {
             return (
-              <div key={`number-${number}`} className='flex mr-[5px] mt-[5px] items-center justify-center w-[40px] h-[40px] rounded-full bg-[#049be5] text-white font-[600] border border-white text-[14px]'>
+              <div
+                key={`number-${number}`}
+                className='flex mr-[5px] mt-[5px] items-center justify-center w-[40px] h-[40px] rounded-full bg-[#049be5] text-white font-[600] border border-white text-[14px] cursor-pointer'
+                onDoubleClick={() => handleDoubleClickNumberPlayed(number)}
+              >
                 {number}
               </div>
             )
